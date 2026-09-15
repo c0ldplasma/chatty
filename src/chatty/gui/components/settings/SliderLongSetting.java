@@ -63,7 +63,7 @@ public class SliderLongSetting extends JPanel implements LongSetting {
     }
     
     private void updateLabel() {
-        valueLabel.setText(LABEL_PREFIX+new Long(value).toString());
+        valueLabel.setText(LABEL_PREFIX+String.valueOf(value));
     }
     
     public void setMajorTickSpacing(int value) {

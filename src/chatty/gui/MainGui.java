@@ -371,11 +371,6 @@ public class MainGui extends JFrame implements Runnable {
         windowStateManager.addWindow(autoModDialog, "autoMod", true, true);
         windowStateManager.addWindow(eventLog, "eventLog", true, true);
         
-        if (System.getProperty("java.version").equals("1.8.0_161")
-                || System.getProperty("java.version").equals("1.8.0_162")) {
-            GuiUtil.installTextComponentFocusWorkaround();
-        }
-        
         ToolTipManager.sharedInstance().setInitialDelay(555);
         ToolTipManager.sharedInstance().setDismissDelay(20*1000);
         

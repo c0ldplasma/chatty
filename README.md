@@ -225,6 +225,16 @@ the release artifacts.
 If you modified Chatty you should set your own client id in `Chatty.java`. You
 may also want to disable the Version Checker.
 
+Requirements
+------------
+
+* **Gradle runs on JDK 17-26** (JDK 25 LTS recommended). Gradle 9.7.1 does not
+  support running on JDK 27 yet.
+* **The code is compiled against JDK 27.** You do not need it installed: the
+  toolchain is auto-provisioned on first build via the Foojay resolver declared
+  in `settings.gradle`. To use a local JDK 27 instead, Gradle will pick it up
+  automatically if it is detectable.
+
 Main release tasks
 ------------------
 
@@ -235,21 +245,22 @@ Main release tasks
 Build parameters
 ----------------
 
-* Windows Standalone (one of these required for the Windows Standalone tasks)
-  * `javapackagerPath` - Path to the `javapackager.exe` in the Java 8 JDK
-    * `jrePath` - Adds `-Bruntime=` option for javapackager (optional, will use
-      default JRE otherwise)
-  * `jpackagePath` - Path to the `jpackage.exe` in the Java 14+ JDK (if you
-    specify this one, it will use jpackage instead of javapackager)
-  * `mtPath` - Path to Microsoft's `mt.exe` (see e.g.
-    <https://stackoverflow.com/questions/54462568/how-to-install-just-mt-exe>),
-    used to add `assets-bundle/Chatty.exe.manifest` to the `Chatty.exe`/
-    `ChattyPortable.exe` (optional)
+* `jpackagePath` - Path to `jpackage` (optional). By default it is taken from
+  the configured JDK 27 toolchain, so this normally does not need to be set.
+* `mtPath` - Path to Microsoft's `mt.exe` (see e.g.
+  <https://stackoverflow.com/questions/54462568/how-to-install-just-mt-exe>),
+  used to add `assets-bundle/Chatty.exe.manifest` to the `Chatty.exe`/
+  `ChattyPortable.exe` (optional)
 * `innosetupPath` - Path to InnoSetup's `iscc.exe` (required for the Windows
   installer tasks)
 
 These build parameters must be specified like this:
-`gradlew windowsZip -PjavapackagerPath="<path_to>/javapackager.exe"`
+`gradlew windowsZip -PinnosetupPath="<path_to>/iscc.exe"`
 
 Full example:
-`gradlew -Dorg.gradle.java.home="C:/Program Files (x86)/Java/jdk1.8.0_201" releaseWinSetups --console=verbose -PjavapackagerPath="C:/Program Files (x86)/Java/jdk1.8.0_201/bin/javapackager.exe" -PjrePath="C:\Program Files (x86)\Java\jre1.8.0_201" -PinnosetupPath="C:\Program Files (x86)\Inno Setup 6\ISCC.exe"`
+`gradlew releaseWinSetups --console=verbose -PinnosetupPath="C:\Program Files (x86)\Inno Setup 6\ISCC.exe"`
+
+The legacy Java 8 `javapackager` path (and its `javapackagerPath` / `jrePath`
+parameters) has been removed; `jpackage` is used exclusively.
+
+See [MODERNIZATION.md](MODERNIZATION.md) for the ongoing modernization plan.

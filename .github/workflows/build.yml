@@ -1,0 +1,43 @@
+name: Build
+
+on:
+  push:
+    branches: [ master, 'modernization/**' ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # Gradle 9.7.1 does not support running on JDK 27 yet, so Gradle itself
+      # runs on the current LTS. The JDK 27 toolchain used to compile the code
+      # is auto-provisioned via the Foojay resolver (see settings.gradle).
+      - name: Set up JDK 25 (Gradle runtime)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Build and test
+        run: ./gradlew build --stacktrace
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: build/reports/tests/test
+          if-no-files-found: ignore

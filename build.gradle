@@ -1,21 +1,30 @@
 import java.util.regex.Matcher
 
 plugins {
-    id 'com.github.johnrengelman.shadow' version '8.1.1'
+    id 'com.gradleup.shadow' version '9.6.1'
     id "org.gradle.crypto.checksum" version "1.4.0"
     id "java"
 }
 
-// This seems to fix non-ASCII characters in the code not appearing correctly after compiling
-compileJava.options.encoding = 'UTF-8'
-compileTestJava.options.encoding = 'UTF-8'
-
-sourceCompatibility = 1.8
-
 // Tells Netbeans what the main class is
 ext.mainClass = 'chatty.Chatty'
 
-archivesBaseName = 'Chatty'
+base {
+    archivesName = 'Chatty'
+}
+
+java {
+    toolchain {
+        // JDK 27 (GA 2026-09-15). Gradle itself runs on an older JDK and forks
+        // the compiler, since Gradle 9.7.1 does not yet support running on 27.
+        languageVersion = JavaLanguageVersion.of(27)
+    }
+}
+
+// This seems to fix non-ASCII characters in the code not appearing correctly after compiling
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
 
 repositories {
     mavenCentral()
@@ -62,10 +71,18 @@ dependencies {
     testImplementation 'junit:junit:4.12'
 }
 
+test {
+    // Gradle 9 scans nested classes as test candidates, which makes JUnit 4 fail
+    // on non-public helper classes like CacheBulkManagerTest$MyRequester. All
+    // real test classes are named *Test, so match those explicitly instead.
+    scanForTestClasses = false
+    include '**/*Test.class'
+}
+
 // The wrapper is a small batch/bash script that can be used to run Gradle on machines where it hasn't been directly
 // installed. It allows you to specify the project's Gradle version for everyone that has checked out the project.
 wrapper {
-    gradleVersion = '6.5.1'
+    gradleVersion = '9.7.1'
 }
 
 jar {
@@ -84,27 +101,27 @@ shadowJar {
     archiveClassifier = ''
     archiveVersion = ''
 
-    manifest {
-        inheritFrom project.tasks.jar.manifest
-    }
+    // Shadow 9 already inherits the 'jar' task manifest. Declaring inheritFrom
+    // explicitly (as was needed with Shadow 8) makes the merge self-referential
+    // and recurses until StackOverflowError.
 }
 
 // The following are a series of tasks for building the release artifacts. They are bundled into zip files and placed
 // in the 'build/releases' directory.
 
-def releasesDir = new File(buildDir, 'releases')
+def releasesDir = layout.buildDirectory.dir('releases')
 
 task allPlatformsZip(type: Zip, group: 'build') {
     dependsOn shadowJar
 
-    from tasks.shadowJar.archivePath
+    from tasks.shadowJar.archiveFile
     from ('assets') {
         exclude 'lib'
         exclude 'linux'
     }
 
     destinationDirectory = releasesDir
-    archiveFileName = "${archivesBaseName}_${project.version}.zip"
+    archiveFileName = "${base.archivesName.get()}_${project.version}.zip"
 }
 
 // Builds all the release zips
@@ -121,38 +138,39 @@ task release(group: 'build') {
 // Windows
 //--------
 
-def windowsBundleTarget = new File(buildDir, 'javapackager')
-def windowsBundleSource = new File(windowsBundleTarget, 'bundles/Chatty')
-def standaloneSuffix = "_legacy";
-def isJPackage = false;
-if (project.hasProperty('jpackagePath')) {
-    windowsBundleTarget = new File(buildDir, 'jpackage')
-    windowsBundleSource = new File(windowsBundleTarget, 'Chatty')
-    standaloneSuffix = "";
-    isJPackage = true;
-}
+def windowsBundleTarget = layout.buildDirectory.dir('jpackage').get().asFile
+def windowsBundleSource = new File(windowsBundleTarget, 'Chatty')
 
-ext.standaloneSuffix = standaloneSuffix
-ext.isJPackageString = isJPackage ? "1" : "0";
+// Kept for the InnoSetup templates, which still reference both placeholders.
+// The legacy Java 8 javapackager path has been removed, so these are now constant.
+ext.standaloneSuffix = ""
+ext.isJPackageString = "1"
+
+// Locate jpackage from the configured Java toolchain, so no path has to be passed
+// in. Can still be overridden with -PjpackagePath=<path>.
+def resolveJpackage = { ->
+    if (project.hasProperty('jpackagePath')) {
+        return project.property('jpackagePath')
+    }
+    def launcher = javaToolchains.launcherFor(java.toolchain).get()
+    def home = launcher.metadata.installationPath.asFile
+    def exe = new File(home, 'bin/jpackage' + (System.getProperty('os.name').toLowerCase().contains('windows') ? '.exe' : ''))
+    if (!exe.exists()) {
+        throw new GradleException("jpackage not found at ${exe}, pass -PjpackagePath=<path> instead")
+    }
+    return exe.absolutePath
+}
 
 task javapackagerBuild(type: Exec, group: 'build') {
     dependsOn shadowJar
 
     doFirst {
-        if (!project.hasProperty('javapackagerPath') && !project.hasProperty('jpackagePath')) {
-            throw new GradleException('Path to javapackager.exe must be defined with -PjavapackagerPath=<path>')
+        delete windowsBundleTarget
+        copy {
+            from tasks.shadowJar.archiveFile
+            into new File(windowsBundleTarget, 'input')
         }
-    }
-    if (project.hasProperty('jpackagePath')) {
-        doFirst {
-            println 'Using jpackagePath';
-            delete windowsBundleTarget
-	    copy {
-		from tasks.shadowJar.archivePath
-                into new File(windowsBundleTarget, 'input')
-	    }
-        }
-	def command = [jpackagePath,
+        commandLine([resolveJpackage(),
 		'--type', 'app-image',
 		'-n', 'Chatty',
 		'-i', new File(windowsBundleTarget, 'input'),
@@ -165,23 +183,7 @@ task javapackagerBuild(type: Exec, group: 'build') {
 		'--icon', 'assets-bundle/Chatty.ico',
 		'--app-version', project.version.replace("-",".").replace("b","0."),
 		'--arguments', '-abc',
-		'--add-launcher', 'ChattyPortable=assets-bundle/LauncherPortable.properties']
-	commandLine command
-    }
-    else if (project.hasProperty('javapackagerPath')) {
-        doFirst {
-            println 'Using javapackagerPath';
-            delete windowsBundleTarget
-        }
-        def command = [javapackagerPath, '-deploy', '-native', 'image', '-srcfiles', tasks.shadowJar.archivePath, '-appclass', 'chatty.Chatty', '-outdir', windowsBundleTarget, '-outfile', 'Chatty']
-        command << "-Bicon=assets-bundle/Chatty.ico"
-        command << "-BappVersion=${project.version}"
-        command << "-BjvmProperties=sun.java2d.d3d=false"
-        command << "-BjvmOptions=-Xmx400M"
-        if (project.hasProperty('jrePath')) {
-            command << "-Bruntime=${jrePath}"
-        }
-        commandLine command
+		'--add-launcher', 'ChattyPortable=assets-bundle/LauncherPortable.properties'])
     }
 }
 
@@ -201,9 +203,7 @@ task javapackagerManifest(group: 'build') {
     doLast {
         if (project.hasProperty('mtPath')) {
             addApplicationManifest(new File(windowsBundleSource, "Chatty.exe"));
-            if (isJPackage) {
-                addApplicationManifest(new File(windowsBundleSource, "ChattyPortable.exe"));
-            }
+            addApplicationManifest(new File(windowsBundleSource, "ChattyPortable.exe"));
         }
         else {
             println("Path to mt.exe has to be specified to add an application manifest, skipping..");
@@ -229,7 +229,7 @@ task windowsZip(type: Zip, group: 'build') {
     from 'assets-bundle/readme-bundle.txt'
 
     destinationDirectory = releasesDir
-    archiveFileName = "${archivesBaseName}_${project.version}_win_standalone${standaloneSuffix}.zip"
+    archiveFileName = "${base.archivesName.get()}_${project.version}_win_standalone${project.ext.standaloneSuffix}.zip"
 }
 
 task releaseWindows(group: 'build') {
@@ -240,8 +240,8 @@ task releaseWindows(group: 'build') {
 // Innosetup
 //----------
 
-def innosetupDir = new File(buildDir, 'innosetup')
-def innosetupDir2 = new File(buildDir, 'innosetup2')
+def innosetupDir = layout.buildDirectory.dir('innosetup').get().asFile
+def innosetupDir2 = layout.buildDirectory.dir('innosetup2').get().asFile
 
 def prepareSetupFile(file, to) {
     copy {
@@ -267,19 +267,18 @@ task innosetup(type: Exec, group: 'build') {
             throw new GradleException('Path to iscc.exe must be defined with -PinnosetupPath=<path>')
         }
 	delete innosetupDir
-        innosetupDir.mkdir();
+        innosetupDir.mkdirs();
 
         prepareSetupFile("setup.iss-template", innosetupDir)
         copy {
-            from(tasks.shadowJar.archivePath)
+            from(tasks.shadowJar.archiveFile)
             from ('assets') {
                 exclude 'lib'
     	    }
             from('assets-bundle/Chatty.ico')
             into("${innosetupDir}/pack")
         }
-        def command = [innosetupPath, "/Q", "${innosetupDir}\\setup.iss"]
-        commandLine command
+        commandLine([innosetupPath, "/Q", "${innosetupDir}\\setup.iss"])
     }
 }
 
@@ -291,7 +290,7 @@ task innosetupStandalone(type: Exec, group: 'build') {
             throw new GradleException('Path to iscc.exe must be defined with -PinnosetupPath=<path>')
         }
 	delete innosetupDir2
-        innosetupDir2.mkdir();
+        innosetupDir2.mkdirs();
 
         prepareSetupFile("setup_standalone.iss-template", innosetupDir2)
         copy {
@@ -306,8 +305,7 @@ task innosetupStandalone(type: Exec, group: 'build') {
             from 'assets-bundle/readme-bundle.txt'
             into("${innosetupDir2}/pack")
         }
-        def command = [innosetupPath, "/Q", "${innosetupDir2}\\setup.iss"]
-        commandLine command
+        commandLine([innosetupPath, "/Q", "${innosetupDir2}\\setup.iss"])
     }
 }
 
@@ -324,10 +322,9 @@ import org.gradle.crypto.checksum.Checksum
 task createChecksums(type: Checksum) {
     mustRunAfter(allPlatformsZip, windowsZip, releaseWindows, releaseWinSetups)
 
-    files = layout.files { releasesDir.listFiles() }.filter { File f ->
+    files = layout.files { releasesDir.get().asFile.listFiles() }.filter { File f ->
         f.name.endsWith(".exe") || f.name.endsWith(".zip")
     }
-    outputDir = new File(releasesDir, "v"+version)
+    outputDir = new File(releasesDir.get().asFile, "v"+version)
     algorithm = Checksum.Algorithm.SHA256
 }
-
