@@ -48,10 +48,10 @@ Low risk, no application behavior change. Unblocks everything else.
   - `archivesBaseName` -> `base { archivesName }`
 - [x] Shadow plugin `com.github.johnrengelman` 8.1.1 (abandoned) ->
       `com.gradleup.shadow` 9.6.1.
-- [x] Target **JDK 27** (GA 2026-09-15) via Gradle toolchains, with Foojay
-      auto-provisioning so contributors do not need a matching local JDK.
+- [x] Target **JDK 25 LTS** via Gradle toolchains, with Foojay auto-provisioning
+      so contributors do not need a matching local JDK.
 - [x] Remove the legacy Java 8 `javapackager` build path (cannot work with a
-      JDK 27 toolchain); keep `jpackage` only.
+      modern toolchain); keep `jpackage` only.
 - [x] Remove the `1.8.0_161`/`1.8.0_162` focus workaround in `MainGui.java` and
       the now-dead `GuiUtil.installTextComponentFocusWorkaround()`.
 - [x] Fix 2x `new Long(...)` (deprecated *for removal* — will eventually stop
@@ -59,27 +59,35 @@ Low risk, no application behavior change. Unblocks everything else.
 - [x] Add GitHub Actions CI (build + test) — nothing currently verifies a PR.
 - [x] Update README build instructions.
 
-### Note on JDK 27 and LTS
+### Note on the JDK choice
 
-JDK 27 is **not** an LTS release. JDK 25 (Sept 2025) is the current LTS; the next
-is expected to be JDK 29. Non-LTS releases receive roughly six months of updates.
+**JDK 25 LTS** is the target. JDK 27 (GA 2026-09-15) was evaluated first and the
+build was briefly moved to it, but it is **not** an LTS release: non-LTS releases
+receive roughly six months of updates.
 
-For an end-user desktop application shipping a bundled runtime via `jpackage`,
-this means the bundled JRE must be refreshed every six months to stay on patched
-builds. This was a deliberate decision for this fork. If the maintenance cadence
-proves impractical, dropping back to JDK 25 LTS is a one-line toolchain change.
+That matters here specifically because Chatty ships a *bundled runtime* to end
+users via `jpackage`. Tracking a non-LTS release would mean refreshing that
+bundled JRE every six months just to stay on patched builds — an ongoing
+maintenance cost with no corresponding benefit for a desktop chat client. LTS 25
+is supported for years instead.
 
-Two practical consequences today:
+Choosing 25 also removed two pieces of incidental complexity that JDK 27
+required:
 
-- Gradle 9.7.1 (built 2026-08-19) lists Java 26 as its highest supported *runtime*.
-  Gradle therefore runs on JDK 25 and compiles with a JDK 27 toolchain in a
-  forked compiler process. This is a supported configuration.
-- Temurin has no JDK 27 GA build yet. Corretto, Oracle and SapMachine do, so
-  toolchain auto-provisioning resolves to one of those for now.
+- Gradle 9.7.1 (built 2026-08-19) lists Java 26 as its highest supported
+  *runtime*, so JDK 27 forced a split setup: Gradle running on one JDK and
+  forking the compiler for another. With 25, Gradle runs on the same JDK it
+  compiles with.
+- Temurin had no JDK 27 GA build yet, so toolchain auto-provisioning resolved to
+  SapMachine. Temurin has JDK 25, so CI and local builds now use the same
+  mainstream distribution.
+
+Everything above is a one-line change in `build.gradle` if a future release
+warrants moving again.
 
 ### Issues found during implementation
 
-Two failures surfaced only after moving to Gradle 9 / JDK 27; both are fixed:
+Two failures surfaced only after moving to Gradle 9; both are fixed:
 
 1. **`shadowJar` crashed with `StackOverflowError`.** Shadow 9 already inherits
    the `jar` task's manifest, so the explicit `manifest { inheritFrom
@@ -96,10 +104,9 @@ Two failures surfaced only after moving to Gradle 9 / JDK 27; both are fixed:
 ### Verification
 
 - `gradlew clean build allPlatformsZip` succeeds; **144 tests, 0 failures**.
-- Bytecode major version **71** (= Java 27) confirmed via `javap`.
-- Toolchain auto-provisioned: SapMachine JDK 27 (27+35). Temurin has no JDK 27
-  GA build yet.
-- The shadow JAR launches and runs on JDK 27 (`Java: 27 (SAP SE)` in the log).
+- Bytecode major version **69** (= Java 25) confirmed via `javap`.
+- The shadow JAR launches and runs on JDK 25.
+- CI green on ubuntu-latest, windows-latest and macos-latest.
 - `gradlew help --warning-mode all` reports **0 deprecation warnings** (the
   baseline self-reported "incompatible with Gradle 9.0").
 
@@ -204,7 +211,7 @@ the bar.
 
 ## Phase 4 — Language level
 
-Once the toolchain is on JDK 27, sweep the code for idioms that are now 10+ years
+Once the toolchain is on JDK 25, sweep the code for idioms that are now 10+ years
 behind:
 
 - [ ] `record` for data holders — 726 `public final` fields, and the ~50 EventSub
@@ -236,8 +243,8 @@ because of its size and risk profile.
 
 | Area | Baseline | Target |
 |---|---|---|
-| Java language level | 8 (2014) | **27** (GA 2026-09-15) |
-| Build JDK | Java 8 JDK | JDK 27 toolchain, Gradle on 25 LTS |
+| Java language level | 8 (2014) | **25 LTS** |
+| Build JDK | Java 8 JDK | JDK 25 LTS toolchain |
 | Gradle | 8.2.1 wrapper / **6.5.1 declared** | **9.7.1**, consistent |
 | Build script style | `Convention` APIs, `archivePath` | `java{}`/`base{}`, `archiveFile` |
 | `settings.gradle` | absent | present, with Foojay resolver |

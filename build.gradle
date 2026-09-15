@@ -15,9 +15,10 @@ base {
 
 java {
     toolchain {
-        // JDK 27 (GA 2026-09-15). Gradle itself runs on an older JDK and forks
-        // the compiler, since Gradle 9.7.1 does not yet support running on 27.
-        languageVersion = JavaLanguageVersion.of(27)
+        // JDK 25 LTS. Chosen over the newer JDK 27 because this ships a bundled
+        // runtime to end users via jpackage, and non-LTS releases only receive
+        // about six months of updates.
+        languageVersion = JavaLanguageVersion.of(25)
     }
 }
 

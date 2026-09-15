@@ -19,10 +19,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Gradle 9.7.1 does not support running on JDK 27 yet, so Gradle itself
-      # runs on the current LTS. The JDK 27 toolchain used to compile the code
-      # is auto-provisioned via the Foojay resolver (see settings.gradle).
-      - name: Set up JDK 25 (Gradle runtime)
+      # JDK 25 LTS is both the Gradle runtime and the compile toolchain, so no
+      # separate toolchain provisioning is needed here.
+      - name: Set up JDK 25 LTS
         uses: actions/setup-java@v5
         with:
           distribution: temurin

@@ -228,12 +228,10 @@ may also want to disable the Version Checker.
 Requirements
 ------------
 
-* **Gradle runs on JDK 17-26** (JDK 25 LTS recommended). Gradle 9.7.1 does not
-  support running on JDK 27 yet.
-* **The code is compiled against JDK 27.** You do not need it installed: the
-  toolchain is auto-provisioned on first build via the Foojay resolver declared
-  in `settings.gradle`. To use a local JDK 27 instead, Gradle will pick it up
-  automatically if it is detectable.
+* **JDK 25 LTS.** You do not strictly need it installed: the toolchain is
+  auto-provisioned on first build via the Foojay resolver declared in
+  `settings.gradle`. A detectable local JDK 25 is used if present.
+* Gradle itself runs on JDK 17-26, so a JDK 25 installation covers both.
 
 Main release tasks
 ------------------
@@ -246,7 +244,7 @@ Build parameters
 ----------------
 
 * `jpackagePath` - Path to `jpackage` (optional). By default it is taken from
-  the configured JDK 27 toolchain, so this normally does not need to be set.
+  the configured JDK 25 toolchain, so this normally does not need to be set.
 * `mtPath` - Path to Microsoft's `mt.exe` (see e.g.
   <https://stackoverflow.com/questions/54462568/how-to-install-just-mt-exe>),
   used to add `assets-bundle/Chatty.exe.manifest` to the `Chatty.exe`/
